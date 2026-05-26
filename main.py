@@ -45,6 +45,10 @@ class CMIQueryPlugin(Star):
         configured = Path(str(self._cfg("cmi_db_path", "") or ""))
         if configured.exists():
             return configured
+        if configured.name and not configured.name.endswith(".db"):
+            configured_db = configured.with_name(f"{configured.name}.db")
+            if configured_db.exists():
+                return configured_db
         local_sample = Path(__file__).parent / "cmi.sqlite.db"
         if local_sample.exists():
             return local_sample

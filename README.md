@@ -20,10 +20,10 @@ AstrBot plugin for querying Minecraft CMI player data from a SQLite database.
 Default server database path:
 
 ```text
-E:\C418\plugins\CMI\cmi.sqlite
+E:\C418\plugins\CMI\cmi.sqlite.db
 ```
 
-For local development, if that path does not exist, the plugin falls back to:
+For compatibility with older configuration values, if `cmi.sqlite` does not exist, the plugin also tries `cmi.sqlite.db`. For local development, if the server path does not exist, the plugin falls back to:
 
 ```text
 cmi.sqlite.db

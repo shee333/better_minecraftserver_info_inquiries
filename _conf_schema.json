@@ -2,8 +2,8 @@
   "cmi_db_path": {
     "description": "CMI SQLite 数据库路径",
     "type": "string",
-    "default": "E:\\C418\\plugins\\CMI\\cmi.sqlite",
-    "hint": "线上服务器上的 CMI 数据库路径。本地开发时如果该路径不存在，会回退到插件目录下的 cmi.sqlite.db。"
+    "default": "E:\\C418\\plugins\\CMI\\cmi.sqlite.db",
+    "hint": "线上服务器上的 CMI 数据库路径。本地开发时如果该路径不存在，会尝试同名 .db 文件，并回退到插件目录下的 cmi.sqlite.db。"
   },
   "ack_emoji_enabled": {
     "description": "收到查询时表情回应",
