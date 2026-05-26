@@ -1,0 +1,36 @@
+{
+  "cmi_db_path": {
+    "description": "CMI SQLite 数据库路径",
+    "type": "string",
+    "default": "E:\\C418\\plugins\\CMI\\cmi.sqlite",
+    "hint": "线上服务器上的 CMI 数据库路径。本地开发时如果该路径不存在，会回退到插件目录下的 cmi.sqlite.db。"
+  },
+  "ack_emoji_enabled": {
+    "description": "收到查询时表情回应",
+    "type": "bool",
+    "default": true
+  },
+  "ack_emoji_id": {
+    "description": "表情回应 ID",
+    "type": "string",
+    "default": "124",
+    "hint": "NapCat set_msg_emoji_like 使用的 emoji_id。"
+  },
+  "forward_sender_name": {
+    "description": "合并转发显示名称",
+    "type": "string",
+    "default": "C418 查询助手"
+  },
+  "default_rank_limit": {
+    "description": "排行榜默认数量",
+    "type": "int",
+    "default": 10,
+    "slider": {"min": 3, "max": 30, "step": 1}
+  },
+  "max_rank_limit": {
+    "description": "排行榜最大数量",
+    "type": "int",
+    "default": 20,
+    "slider": {"min": 5, "max": 50, "step": 1}
+  }
+}

@@ -1,0 +1,10 @@
+__pycache__/ export-ignore
+*.py[cod] export-ignore
+.ruff_cache/ export-ignore
+.pytest_cache/ export-ignore
+.env export-ignore
+*.sqlite export-ignore
+*.sqlite3 export-ignore
+*.db export-ignore
+.gitignore export-ignore
+.gitattributes export-ignore
