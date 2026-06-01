@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from pathlib import Path
-from textwrap import shorten
 
 from PIL import Image, ImageDraw, ImageFont
 
@@ -68,7 +67,7 @@ def _wrap_text(
     text: str,
     font: ImageFont.ImageFont,
     max_width: int,
-    max_lines: int,
+    max_lines: int | None = None,
 ) -> list[str]:
     if not text:
         return []
@@ -82,34 +81,40 @@ def _wrap_text(
         if current:
             lines.append(current)
         current = character
-        if len(lines) >= max_lines:
+        if max_lines is not None and len(lines) >= max_lines:
             break
-    if current and len(lines) < max_lines:
+    if current and (max_lines is None or len(lines) < max_lines):
         lines.append(current)
-    if len(lines) == max_lines and _text_width(draw, lines[-1], font) > max_width:
-        lines[-1] = shorten(
-            lines[-1], width=max(8, len(lines[-1]) - 2), placeholder="..."
-        )
-    return lines[:max_lines]
+    return lines[:max_lines] if max_lines is not None else lines
 
 
-def _fit_text(
+def _status_detail_lines(
     draw: ImageDraw.ImageDraw,
-    text: str,
-    font: ImageFont.ImageFont,
+    status: MinecraftServerStatus,
+    show_sample_players: bool,
     max_width: int,
-) -> str:
-    if _text_width(draw, text, font) <= max_width:
-        return text
-    ellipsis = "..."
-    available_width = max(0, max_width - _text_width(draw, ellipsis, font))
-    current = ""
-    for character in text:
-        candidate = current + character
-        if _text_width(draw, candidate, font) > available_width:
-            break
-        current = candidate
-    return f"{current}{ellipsis}" if current else ellipsis
+) -> list[tuple[str, tuple[int, int, int]]]:
+    if not status.online:
+        return [(f"错误：{status.error or '连接超时'}", RED)]
+
+    lines: list[tuple[str, tuple[int, int, int]]] = []
+    motd_lines = _wrap_text(draw, status.motd, SMALL_FONT, max_width, 2)
+    lines.extend((f"MOTD：{line}", MUTED) for line in motd_lines)
+    if show_sample_players and status.sample_players:
+        player_text = "在线玩家：" + "、".join(status.sample_players)
+        player_lines = _wrap_text(draw, player_text, SMALL_FONT, max_width)
+        lines.extend((line, YELLOW) for line in player_lines)
+    return lines
+
+
+def _card_height(
+    draw: ImageDraw.ImageDraw,
+    status: MinecraftServerStatus,
+    show_sample_players: bool,
+    detail_width: int,
+) -> int:
+    detail_lines = _status_detail_lines(draw, status, show_sample_players, detail_width)
+    return max(132, 100 + len(detail_lines) * 22 + CARD_PADDING)
 
 
 def _players_text(status: MinecraftServerStatus) -> str:
@@ -150,11 +155,10 @@ def _draw_card(
 ) -> int:
     card_left = PADDING
     card_right = WIDTH - PADDING
-    card_height = 132
-    if status.motd:
-        card_height += 24 * min(len(status.motd) // 38 + 1, 2)
-    if show_sample_players and status.sample_players:
-        card_height += 24
+    text_left = card_left + CARD_PADDING + 58 + 74
+    detail_width = card_right - text_left - 18
+    detail_lines = _status_detail_lines(draw, status, show_sample_players, detail_width)
+    card_height = _card_height(draw, status, show_sample_players, detail_width)
 
     draw.rounded_rectangle(
         (card_left, top, card_right, top + card_height),
@@ -167,7 +171,6 @@ def _draw_card(
     icon_top = top + CARD_PADDING
     _draw_icon(draw, icon_left, icon_top, name, status.online)
 
-    text_left = icon_left + 74
     status_color = GREEN if status.online else RED
     status_text = "在线" if status.online else "离线"
     draw.text((text_left, top + 15), name, fill=TEXT, font=NAME_FONT)
@@ -200,34 +203,9 @@ def _draw_card(
     )
 
     line_top = top + 100
-    if status.online:
-        motd_lines = _wrap_text(
-            draw, status.motd, SMALL_FONT, card_right - text_left - 18, 2
-        )
-        for line in motd_lines:
-            draw.text(
-                (text_left, line_top), f"MOTD：{line}", fill=MUTED, font=SMALL_FONT
-            )
-            line_top += 22
-        if show_sample_players and status.sample_players:
-            sample_text = "、".join(status.sample_players[:12])
-            sample_prefix = "玩家样本："
-            sample_width = (
-                card_right
-                - text_left
-                - 18
-                - _text_width(draw, sample_prefix, SMALL_FONT)
-            )
-            fitted_sample = _fit_text(draw, sample_text, SMALL_FONT, sample_width)
-            draw.text(
-                (text_left, line_top),
-                f"{sample_prefix}{fitted_sample}",
-                fill=YELLOW,
-                font=SMALL_FONT,
-            )
-    else:
-        error = status.error or "连接超时"
-        draw.text((text_left, line_top), f"错误：{error}", fill=RED, font=SMALL_FONT)
+    for line, fill in detail_lines:
+        draw.text((text_left, line_top), line, fill=fill, font=SMALL_FONT)
+        line_top += 22
 
     return top + card_height + 16
 
@@ -241,11 +219,13 @@ def render_status_image(
     probe_draw = ImageDraw.Draw(probe)
     total_height = 92
     for name, status in items:
-        card_height = 132
-        if status.motd:
-            card_height += 24 * min(len(status.motd) // 38 + 1, 2)
-        if show_sample_players and status.sample_players:
-            card_height += 24
+        card_left = PADDING
+        card_right = WIDTH - PADDING
+        text_left = card_left + CARD_PADDING + 58 + 74
+        detail_width = card_right - text_left - 18
+        card_height = _card_height(
+            probe_draw, status, show_sample_players, detail_width
+        )
         total_height += card_height + 16
     total_height += 36
 

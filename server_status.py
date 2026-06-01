@@ -230,5 +230,5 @@ def format_server_status(
     if status.motd:
         lines.append(f"MOTD：{status.motd}")
     if show_sample_players and status.sample_players:
-        lines.append("玩家样本：" + "、".join(status.sample_players[:12]))
+        lines.append("在线玩家：" + "、".join(status.sample_players))
     return ["\n".join(lines)]

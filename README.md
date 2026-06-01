@@ -50,7 +50,7 @@ Configurable fields:
 - `server_status_host`: old single-server domain or IP, kept for compatibility.
 - `server_status_port`: old single-server port, kept for compatibility.
 - `server_status_timeout_seconds`: connection timeout, default `3.0`
-- `server_status_show_sample_players`: whether to show sample player names returned by the server status protocol
+- `server_status_show_sample_players`: whether to show player names returned by the server status protocol
 - `server_status_render_image`: whether to render status results as a local PNG image, default `true`
 
 ## Commands
