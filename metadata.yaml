@@ -2,7 +2,7 @@ name: better_minecraftserver_info_inquiries
 display_name: C418 Minecraft Query
 desc: 通过机器人查询 Minecraft 服务器 CMI 玩家信息、排行榜、封禁状态和在线状态。
 short_desc: 查询 CMI 玩家信息、服务器状态、排行榜和封禁列表。
-version: v0.2.0
+version: v0.2.1
 author: shee33
 repo: https://github.com/shee333/better_minecraftserver_info_inquiries
 astrbot_version: ">=4.24.0"

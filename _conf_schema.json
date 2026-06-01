@@ -24,13 +24,14 @@
   "server_status_name": {
     "description": "服务器显示名称",
     "type": "string",
-    "default": "C418"
+    "default": "C418",
+    "hint": "兼容旧版单服务器配置。多服务器查询优先使用 server_status_servers。"
   },
   "server_status_host": {
     "description": "服务器地址",
     "type": "string",
     "default": "127.0.0.1",
-    "hint": "Minecraft Java 服务器地址，可以填写域名或 IP。"
+    "hint": "兼容旧版单服务器配置。多服务器查询优先使用 server_status_servers。"
   },
   "server_status_port": {
     "description": "服务器端口",
@@ -49,6 +50,12 @@
     "type": "bool",
     "default": true,
     "hint": "只显示 Minecraft status 协议返回的 sample 玩家名，不读取 CMI 数据库。"
+  },
+  "server_status_servers": {
+    "description": "服务器状态查询目标列表",
+    "type": "string",
+    "default": "[{\"name\":\"轮换服\",\"host\":\"turbo1.yunmc.vip\",\"port\":30175,\"aliases\":[\"轮换\",\"轮换服务器\",\"turbo\",\"turbo1\"]},{\"name\":\"C418\",\"host\":\"mc39.rhymc.com\",\"port\":24465,\"aliases\":[\"c418\",\"C418服\",\"主服\"]},{\"name\":\"群组服\",\"host\":\"mc39.rhymc.com\",\"port\":24463,\"aliases\":[\"群组\",\"群组服务器\",\"全服\",\"velocity\",\"proxy\"]}]",
+    "hint": "JSON 数组。每项包含 name、host、port、aliases。自然语言工具会按 name/aliases 匹配；留空或说“全部”会查询所有目标。"
   },
   "default_rank_limit": {
     "description": "排行榜默认数量",

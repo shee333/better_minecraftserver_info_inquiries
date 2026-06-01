@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import asyncio
+import json
 from pathlib import Path
 from typing import Any
 
@@ -23,12 +25,33 @@ from .server_status import format_server_status, ping_java_server
 
 PLUGIN_NAME = "better_minecraftserver_info_inquiries"
 
+DEFAULT_SERVER_STATUS_TARGETS = [
+    {
+        "name": "轮换服",
+        "host": "turbo1.yunmc.vip",
+        "port": 30175,
+        "aliases": ["轮换", "轮换服务器", "turbo", "turbo1"],
+    },
+    {
+        "name": "C418",
+        "host": "mc39.rhymc.com",
+        "port": 24465,
+        "aliases": ["c418", "C418服", "主服"],
+    },
+    {
+        "name": "群组服",
+        "host": "mc39.rhymc.com",
+        "port": 24463,
+        "aliases": ["群组", "群组服务器", "群组服", "全服", "velocity", "proxy"],
+    },
+]
+
 
 @register(
     PLUGIN_NAME,
     "shee33",
     "查询 Minecraft CMI 玩家信息、排行榜、封禁状态和服务器在线状态。",
-    "0.2.0",
+    "0.2.1",
 )
 class CMIQueryPlugin(Star):
     def __init__(self, context: Context, config: AstrBotConfig):
@@ -64,14 +87,87 @@ class CMIQueryPlugin(Star):
     def _max_limit(self) -> int:
         return int(self._cfg("max_rank_limit", 20) or 20)
 
-    def _server_status_host(self) -> str:
-        return str(self._cfg("server_status_host", "127.0.0.1") or "127.0.0.1")
-
-    def _server_status_port(self) -> int:
+    def _normalize_server_target(self, target: dict[str, Any]) -> dict[str, Any] | None:
+        name = str(target.get("name") or "").strip()
+        host = str(target.get("host") or "").strip()
+        port = target.get("port")
+        address = str(target.get("address") or "").strip()
+        if address and not host:
+            host, _, port_text = address.rpartition(":")
+            if port_text:
+                port = port_text
+            else:
+                host = address
+        if not name or not host:
+            return None
         try:
-            return int(self._cfg("server_status_port", 25565) or 25565)
+            port_int = int(port or 25565)
         except (TypeError, ValueError):
-            return 25565
+            port_int = 25565
+        aliases = target.get("aliases") or []
+        if isinstance(aliases, str):
+            aliases = [item.strip() for item in aliases.split(",") if item.strip()]
+        if not isinstance(aliases, list):
+            aliases = []
+        return {
+            "name": name,
+            "host": host,
+            "port": port_int,
+            "aliases": [str(alias).strip() for alias in aliases if str(alias).strip()],
+        }
+
+    def _server_status_targets(self) -> list[dict[str, Any]]:
+        raw_targets = self._cfg("server_status_servers", None)
+        parsed_targets: Any = None
+        if isinstance(raw_targets, str) and raw_targets.strip():
+            try:
+                parsed_targets = json.loads(raw_targets)
+            except json.JSONDecodeError:
+                logger.warning(
+                    "server_status_servers 不是合法 JSON，使用默认服务器列表"
+                )
+        elif isinstance(raw_targets, list):
+            parsed_targets = raw_targets
+
+        if not parsed_targets:
+            parsed_targets = DEFAULT_SERVER_STATUS_TARGETS
+
+        targets = []
+        if isinstance(parsed_targets, dict):
+            parsed_targets = [parsed_targets]
+        if isinstance(parsed_targets, list):
+            for target in parsed_targets:
+                if isinstance(target, dict):
+                    normalized = self._normalize_server_target(target)
+                    if normalized:
+                        targets.append(normalized)
+
+        if targets:
+            return targets
+
+        single_target = self._normalize_server_target(
+            {
+                "name": self._cfg("server_status_name", "C418"),
+                "host": self._cfg("server_status_host", "127.0.0.1"),
+                "port": self._cfg("server_status_port", 25565),
+            }
+        )
+        return [single_target] if single_target else DEFAULT_SERVER_STATUS_TARGETS
+
+    def _match_server_status_target(
+        self, server_name: str = ""
+    ) -> dict[str, Any] | None:
+        query = str(server_name or "").strip().lower()
+        if not query or query in {"全部", "所有", "all", "服务器", "mc", "minecraft"}:
+            return None
+        for target in self._server_status_targets():
+            names = [target["name"], *target.get("aliases", [])]
+            lowered_names = [str(name).lower() for name in names if str(name).strip()]
+            if query in lowered_names:
+                return target
+            if any(name and name in query for name in lowered_names):
+                return target
+        return None
 
     def _server_status_timeout(self) -> float:
         try:
@@ -173,20 +269,32 @@ class CMIQueryPlugin(Star):
         await self._send(event, "封禁状态查询", [section])
         return f"已通过合并转发发送 {player.get('username')} 的封禁状态。"
 
-    async def _query_server_status(self, event: AstrMessageEvent) -> str:
-        host = self._server_status_host()
-        port = self._server_status_port()
-        server_name = str(self._cfg("server_status_name", "C418") or "C418")
-        status = await ping_java_server(host, port, self._server_status_timeout())
-        sections = format_server_status(
-            status,
-            server_name,
-            bool(self._cfg("server_status_show_sample_players", True)),
+    async def _query_server_status(
+        self, event: AstrMessageEvent, server_name: str = ""
+    ) -> str:
+        matched_target = self._match_server_status_target(server_name)
+        targets = [matched_target] if matched_target else self._server_status_targets()
+        show_sample_players = bool(self._cfg("server_status_show_sample_players", True))
+        timeout_seconds = self._server_status_timeout()
+        results = await asyncio.gather(
+            *(
+                ping_java_server(target["host"], int(target["port"]), timeout_seconds)
+                for target in targets
+            )
         )
+        sections = []
+        for target, status in zip(targets, results, strict=False):
+            sections.extend(
+                format_server_status(status, target["name"], show_sample_players)
+            )
         await self._send(event, "Minecraft 服务器状态", sections)
-        if status.online:
-            return f"服务器 {server_name} 在线，在线人数 {status.online_players}/{status.max_players}。"
-        return f"服务器 {server_name} 离线或无法连接：{status.error or '连接超时'}"
+        online_count = sum(1 for status in results if status.online)
+        if matched_target:
+            status = results[0]
+            if status.online:
+                return f"服务器 {matched_target['name']} 在线，在线人数 {status.online_players}/{status.max_players}。"
+            return f"服务器 {matched_target['name']} 离线或无法连接：{status.error or '连接超时'}"
+        return f"已查询 {len(results)} 个服务器，其中 {online_count} 个在线。"
 
     @filter.command("查询玩家")
     @filter.platform_adapter_type(filter.PlatformAdapterType.AIOCQHTTP)
@@ -253,16 +361,18 @@ class CMIQueryPlugin(Star):
     @filter.command("服务器状态")
     @filter.platform_adapter_type(filter.PlatformAdapterType.AIOCQHTTP)
     @filter.event_message_type(filter.EventMessageType.GROUP_MESSAGE)
-    async def server_status_command(self, event: AstrMessageEvent):
+    async def server_status_command(
+        self, event: AstrMessageEvent, server_name: str = ""
+    ):
         await self._ack(event)
-        await self._query_server_status(event)
+        await self._query_server_status(event, server_name)
 
     @filter.command("MC状态")
     @filter.platform_adapter_type(filter.PlatformAdapterType.AIOCQHTTP)
     @filter.event_message_type(filter.EventMessageType.GROUP_MESSAGE)
-    async def mc_status_command(self, event: AstrMessageEvent):
+    async def mc_status_command(self, event: AstrMessageEvent, server_name: str = ""):
         await self._ack(event)
-        await self._query_server_status(event)
+        await self._query_server_status(event, server_name)
 
     @filter.llm_tool(name="shee33_mc_query_player")
     async def shee33_mc_query_player(
@@ -343,10 +453,16 @@ class CMIQueryPlugin(Star):
         return await self._query_ban_status(event, username)
 
     @filter.llm_tool(name="shee33_mc_server_status")
-    async def shee33_mc_server_status(self, event: AstrMessageEvent) -> str:
-        """查询 Minecraft Java 服务器当前在线状态，包括是否在线、延迟、版本、MOTD 和在线人数。"""
+    async def shee33_mc_server_status(
+        self, event: AstrMessageEvent, server_name: str = ""
+    ) -> str:
+        """查询 Minecraft Java 服务器当前在线状态，包括是否在线、延迟、版本、MOTD 和在线人数。可查询全部服务器，也可指定轮换服、C418 或群组服。
+
+        Args:
+            server_name(string): 服务器名称或别名，可填“轮换服”、“C418”、“群组服”；留空时查询全部服务器。
+        """
         await self._ack(event)
-        return await self._query_server_status(event)
+        return await self._query_server_status(event, server_name)
 
     async def terminate(self):
         logger.info("new_plugin CMI query plugin terminated")

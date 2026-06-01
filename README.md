@@ -10,7 +10,7 @@ AstrBot plugin for querying Minecraft CMI player data from a SQLite database and
 - Query Home count only. Home names, worlds and coordinates are never returned to normal members.
 - Query playtime ranking, balance ranking and recent login players.
 - Query banned player list and ban details, including ban time, operator and reason.
-- Query Minecraft Java server online status, latency, version, MOTD and player count.
+- Query Minecraft Java server online status, latency, version, MOTD and player count for multiple named servers.
 - Never reads or returns IP-related fields such as `Ips` or `LockedIps`.
 - Sends query results through QQ merged forward messages to avoid flooding group chat.
 - Reacts to accepted query messages with QQ emoji feedback through NapCat `set_msg_emoji_like`.
@@ -36,11 +36,18 @@ The database is opened in read-only mode.
 
 The server status query uses the Minecraft Java status ping protocol directly and does not require extra Python dependencies.
 
+Default server status targets:
+
+- 轮换服: `turbo1.yunmc.vip:30175`
+- C418: `mc39.rhymc.com:24465`
+- 群组服: `mc39.rhymc.com:24463`
+
 Configurable fields:
 
-- `server_status_name`: display name, default `C418`
-- `server_status_host`: server domain or IP, default `127.0.0.1`
-- `server_status_port`: server port, default `25565`
+- `server_status_servers`: JSON server list. Each item supports `name`, `host`, `port` and `aliases`.
+- `server_status_name`: old single-server display name, kept for compatibility.
+- `server_status_host`: old single-server domain or IP, kept for compatibility.
+- `server_status_port`: old single-server port, kept for compatibility.
 - `server_status_timeout_seconds`: connection timeout, default `3.0`
 - `server_status_show_sample_players`: whether to show sample player names returned by the server status protocol
 
@@ -55,8 +62,8 @@ These commands are mainly for fallback and debugging. Natural-language usage is 
 - `查询home数量 <玩家名>`
 - `封禁列表`
 - `封禁状态 <玩家名>`
-- `服务器状态`
-- `MC状态`
+- `服务器状态 [轮换服|C418|群组服]`
+- `MC状态 [轮换服|C418|群组服]`
 
 ## LLM Tools
 
@@ -80,6 +87,9 @@ These commands are mainly for fallback and debugging. Natural-language usage is 
 - `@机器人 ceester 为什么被封？`
 - `@机器人 服务器现在开着吗？`
 - `@机器人 查一下 MC 在线人数`
+- `@机器人 C418 现在在线吗？`
+- `@机器人 轮换服延迟多少？`
+- `@机器人 群组服有几个人在线？`
 
 ## Privacy Rules
 
