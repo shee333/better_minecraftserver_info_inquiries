@@ -260,7 +260,7 @@ def render_status_image(
     for name, status in items:
         top = _draw_card(draw, top, name, status, show_sample_players)
 
-    footer = "Rendered locally by AstrBot"
+    footer = "[Powered by 栎木木！]"
     draw.text((PADDING, total_height - 28), footer, fill=DIM, font=SMALL_FONT)
     output_path.parent.mkdir(parents=True, exist_ok=True)
     image.save(output_path, format="PNG")
