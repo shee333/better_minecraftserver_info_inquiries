@@ -4,11 +4,13 @@ import asyncio
 import json
 from pathlib import Path
 from typing import Any
+from uuid import uuid4
 
 from astrbot.api import logger
-from astrbot.api.event import AstrMessageEvent, filter
+from astrbot.api.event import AstrMessageEvent, MessageChain, filter
 from astrbot.api.star import Context, Star, register
 from astrbot.core import AstrBotConfig
+from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
 
 from .cmi_repository import CMIRepository
 from .formatting import (
@@ -22,6 +24,7 @@ from .formatting import (
 )
 from .qq_feedback import react_received, send_forward_result
 from .server_status import format_server_status, ping_java_server
+from .status_image import render_status_image
 
 PLUGIN_NAME = "better_minecraftserver_info_inquiries"
 
@@ -51,7 +54,7 @@ DEFAULT_SERVER_STATUS_TARGETS = [
     PLUGIN_NAME,
     "shee33",
     "查询 Minecraft CMI 玩家信息、排行榜、封禁状态和服务器在线状态。",
-    "0.2.1",
+    "0.3.0",
 )
 class CMIQueryPlugin(Star):
     def __init__(self, context: Context, config: AstrBotConfig):
@@ -287,7 +290,27 @@ class CMIQueryPlugin(Star):
             sections.extend(
                 format_server_status(status, target["name"], show_sample_players)
             )
-        await self._send(event, "Minecraft 服务器状态", sections)
+        image_sent = False
+        if bool(self._cfg("server_status_render_image", True)):
+            try:
+                output_path = (
+                    Path(get_astrbot_temp_path())
+                    / f"minecraft_status_{uuid4().hex}.png"
+                )
+                render_status_image(
+                    [
+                        (target["name"], status)
+                        for target, status in zip(targets, results, strict=False)
+                    ],
+                    output_path,
+                    show_sample_players,
+                )
+                await event.send(MessageChain().file_image(str(output_path)))
+                image_sent = True
+            except Exception as exc:
+                logger.warning("服务器状态图片渲染或发送失败，回退到合并转发: %s", exc)
+        if not image_sent:
+            await self._send(event, "Minecraft 服务器状态", sections)
         online_count = sum(1 for status in results if status.online)
         if matched_target:
             status = results[0]

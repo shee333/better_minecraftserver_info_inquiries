@@ -11,6 +11,7 @@ AstrBot plugin for querying Minecraft CMI player data from a SQLite database and
 - Query playtime ranking, balance ranking and recent login players.
 - Query banned player list and ban details, including ban time, operator and reason.
 - Query Minecraft Java server online status, latency, version, MOTD and player count for multiple named servers.
+- Render Minecraft server status as a local PNG image, with merged-forward text fallback.
 - Never reads or returns IP-related fields such as `Ips` or `LockedIps`.
 - Sends query results through QQ merged forward messages to avoid flooding group chat.
 - Reacts to accepted query messages with QQ emoji feedback through NapCat `set_msg_emoji_like`.
@@ -50,6 +51,7 @@ Configurable fields:
 - `server_status_port`: old single-server port, kept for compatibility.
 - `server_status_timeout_seconds`: connection timeout, default `3.0`
 - `server_status_show_sample_players`: whether to show sample player names returned by the server status protocol
+- `server_status_render_image`: whether to render status results as a local PNG image, default `true`
 
 ## Commands
 

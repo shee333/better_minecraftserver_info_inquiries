@@ -51,6 +51,12 @@
     "default": true,
     "hint": "只显示 Minecraft status 协议返回的 sample 玩家名，不读取 CMI 数据库。"
   },
+  "server_status_render_image": {
+    "description": "服务器状态使用本地图片渲染",
+    "type": "bool",
+    "default": true,
+    "hint": "开启后会使用 Pillow 在本地生成状态图并发送；失败时自动回退到合并转发文本。"
+  },
   "server_status_servers": {
     "description": "服务器状态查询目标列表",
     "type": "string",
