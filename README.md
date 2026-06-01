@@ -2,7 +2,7 @@
 
 Repository: https://github.com/shee333/better_minecraftserver_info_inquiries
 
-AstrBot plugin for querying Minecraft CMI player data from a SQLite database.
+AstrBot plugin for querying Minecraft CMI player data from a SQLite database and checking Minecraft Java server status.
 
 ## Features
 
@@ -10,6 +10,7 @@ AstrBot plugin for querying Minecraft CMI player data from a SQLite database.
 - Query Home count only. Home names, worlds and coordinates are never returned to normal members.
 - Query playtime ranking, balance ranking and recent login players.
 - Query banned player list and ban details, including ban time, operator and reason.
+- Query Minecraft Java server online status, latency, version, MOTD and player count.
 - Never reads or returns IP-related fields such as `Ips` or `LockedIps`.
 - Sends query results through QQ merged forward messages to avoid flooding group chat.
 - Reacts to accepted query messages with QQ emoji feedback through NapCat `set_msg_emoji_like`.
@@ -31,6 +32,18 @@ cmi.sqlite.db
 
 The database is opened in read-only mode.
 
+## Server Status
+
+The server status query uses the Minecraft Java status ping protocol directly and does not require extra Python dependencies.
+
+Configurable fields:
+
+- `server_status_name`: display name, default `C418`
+- `server_status_host`: server domain or IP, default `127.0.0.1`
+- `server_status_port`: server port, default `25565`
+- `server_status_timeout_seconds`: connection timeout, default `3.0`
+- `server_status_show_sample_players`: whether to show sample player names returned by the server status protocol
+
 ## Commands
 
 These commands are mainly for fallback and debugging. Natural-language usage is also supported through LLM tools.
@@ -42,6 +55,8 @@ These commands are mainly for fallback and debugging. Natural-language usage is 
 - `查询home数量 <玩家名>`
 - `封禁列表`
 - `封禁状态 <玩家名>`
+- `服务器状态`
+- `MC状态`
 
 ## LLM Tools
 
@@ -52,6 +67,7 @@ These commands are mainly for fallback and debugging. Natural-language usage is 
 - `shee33_mc_recent_players`
 - `shee33_mc_list_banned_players`
 - `shee33_mc_query_ban_status`
+- `shee33_mc_server_status`
 
 ## Natural Language Examples
 
@@ -62,6 +78,8 @@ These commands are mainly for fallback and debugging. Natural-language usage is 
 - `@机器人 BigSoap 有几个家？`
 - `@机器人 目前有哪些玩家被封禁了？`
 - `@机器人 ceester 为什么被封？`
+- `@机器人 服务器现在开着吗？`
+- `@机器人 查一下 MC 在线人数`
 
 ## Privacy Rules
 
@@ -74,6 +92,7 @@ Normal members can query:
 - Home count only
 - ban status, ban time, operator and reason
 - rankings and recent login list
+- Minecraft server online status, latency, version, MOTD and online player count
 
 The plugin does not read or return:
 

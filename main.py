@@ -19,6 +19,7 @@ from .formatting import (
     format_timestamp_ms,
 )
 from .qq_feedback import react_received, send_forward_result
+from .server_status import format_server_status, ping_java_server
 
 PLUGIN_NAME = "better_minecraftserver_info_inquiries"
 
@@ -26,8 +27,8 @@ PLUGIN_NAME = "better_minecraftserver_info_inquiries"
 @register(
     PLUGIN_NAME,
     "shee33",
-    "查询 Minecraft CMI 玩家信息、排行榜和封禁状态。",
-    "0.1.0",
+    "查询 Minecraft CMI 玩家信息、排行榜、封禁状态和服务器在线状态。",
+    "0.2.0",
 )
 class CMIQueryPlugin(Star):
     def __init__(self, context: Context, config: AstrBotConfig):
@@ -62,6 +63,21 @@ class CMIQueryPlugin(Star):
 
     def _max_limit(self) -> int:
         return int(self._cfg("max_rank_limit", 20) or 20)
+
+    def _server_status_host(self) -> str:
+        return str(self._cfg("server_status_host", "127.0.0.1") or "127.0.0.1")
+
+    def _server_status_port(self) -> int:
+        try:
+            return int(self._cfg("server_status_port", 25565) or 25565)
+        except (TypeError, ValueError):
+            return 25565
+
+    def _server_status_timeout(self) -> float:
+        try:
+            return float(self._cfg("server_status_timeout_seconds", 3) or 3)
+        except (TypeError, ValueError):
+            return 3.0
 
     async def _ack(self, event: AstrMessageEvent) -> None:
         await react_received(
@@ -157,6 +173,21 @@ class CMIQueryPlugin(Star):
         await self._send(event, "封禁状态查询", [section])
         return f"已通过合并转发发送 {player.get('username')} 的封禁状态。"
 
+    async def _query_server_status(self, event: AstrMessageEvent) -> str:
+        host = self._server_status_host()
+        port = self._server_status_port()
+        server_name = str(self._cfg("server_status_name", "C418") or "C418")
+        status = await ping_java_server(host, port, self._server_status_timeout())
+        sections = format_server_status(
+            status,
+            server_name,
+            bool(self._cfg("server_status_show_sample_players", True)),
+        )
+        await self._send(event, "Minecraft 服务器状态", sections)
+        if status.online:
+            return f"服务器 {server_name} 在线，在线人数 {status.online_players}/{status.max_players}。"
+        return f"服务器 {server_name} 离线或无法连接：{status.error or '连接超时'}"
+
     @filter.command("查询玩家")
     @filter.platform_adapter_type(filter.PlatformAdapterType.AIOCQHTTP)
     @filter.event_message_type(filter.EventMessageType.GROUP_MESSAGE)
@@ -218,6 +249,20 @@ class CMIQueryPlugin(Star):
             )
             return
         await self._query_ban_status(event, username)
+
+    @filter.command("服务器状态")
+    @filter.platform_adapter_type(filter.PlatformAdapterType.AIOCQHTTP)
+    @filter.event_message_type(filter.EventMessageType.GROUP_MESSAGE)
+    async def server_status_command(self, event: AstrMessageEvent):
+        await self._ack(event)
+        await self._query_server_status(event)
+
+    @filter.command("MC状态")
+    @filter.platform_adapter_type(filter.PlatformAdapterType.AIOCQHTTP)
+    @filter.event_message_type(filter.EventMessageType.GROUP_MESSAGE)
+    async def mc_status_command(self, event: AstrMessageEvent):
+        await self._ack(event)
+        await self._query_server_status(event)
 
     @filter.llm_tool(name="shee33_mc_query_player")
     async def shee33_mc_query_player(
@@ -296,6 +341,12 @@ class CMIQueryPlugin(Star):
         """
         await self._ack(event)
         return await self._query_ban_status(event, username)
+
+    @filter.llm_tool(name="shee33_mc_server_status")
+    async def shee33_mc_server_status(self, event: AstrMessageEvent) -> str:
+        """查询 Minecraft Java 服务器当前在线状态，包括是否在线、延迟、版本、MOTD 和在线人数。"""
+        await self._ack(event)
+        return await self._query_server_status(event)
 
     async def terminate(self):
         logger.info("new_plugin CMI query plugin terminated")

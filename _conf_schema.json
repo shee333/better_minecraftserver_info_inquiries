@@ -21,6 +21,35 @@
     "type": "string",
     "default": "C418 查询助手"
   },
+  "server_status_name": {
+    "description": "服务器显示名称",
+    "type": "string",
+    "default": "C418"
+  },
+  "server_status_host": {
+    "description": "服务器地址",
+    "type": "string",
+    "default": "127.0.0.1",
+    "hint": "Minecraft Java 服务器地址，可以填写域名或 IP。"
+  },
+  "server_status_port": {
+    "description": "服务器端口",
+    "type": "int",
+    "default": 25565,
+    "slider": {"min": 1, "max": 65535, "step": 1}
+  },
+  "server_status_timeout_seconds": {
+    "description": "状态查询超时秒数",
+    "type": "float",
+    "default": 3.0,
+    "slider": {"min": 1, "max": 10, "step": 0.5}
+  },
+  "server_status_show_sample_players": {
+    "description": "显示服务器返回的玩家样本",
+    "type": "bool",
+    "default": true,
+    "hint": "只显示 Minecraft status 协议返回的 sample 玩家名，不读取 CMI 数据库。"
+  },
   "default_rank_limit": {
     "description": "排行榜默认数量",
     "type": "int",
