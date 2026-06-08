@@ -60,7 +60,7 @@
   "server_status_servers": {
     "description": "服务器状态查询目标列表",
     "type": "string",
-    "default": "[{\"name\":\"轮换服\",\"host\":\"turbo1.yunmc.vip\",\"port\":30175,\"aliases\":[\"轮换\",\"轮换服务器\",\"turbo\",\"turbo1\"]},{\"name\":\"C418\",\"host\":\"mc39.rhymc.com\",\"port\":24465,\"aliases\":[\"c418\",\"C418服\",\"主服\"]},{\"name\":\"群组服\",\"host\":\"mc39.rhymc.com\",\"port\":24463,\"aliases\":[\"群组\",\"群组服务器\",\"全服\",\"velocity\",\"proxy\"]}]",
+    "default": "[{\"name\":\"轮换服\",\"host\":\"turbo1.yunmc.vip\",\"port\":30175,\"aliases\":[\"轮换\",\"轮换服务器\",\"turbo\",\"turbo1\"]},{\"name\":\"C418\",\"host\":\"mc39.rhymc.com\",\"port\":24465,\"aliases\":[\"c418\",\"C418服\",\"主服\"]},{\"name\":\"群组服\",\"host\":\"mc39.rhymc.com\",\"port\":24463,\"aliases\":[\"群组\",\"群组服务器\",\"全服\",\"velocity\",\"proxy\"]},{\"name\":\"ACT/0/\",\"host\":\"mc39.rhymc.com\",\"port\":24468,\"aliases\":[\"act\",\"ACT\",\"ACT/0\",\"act0\",\"ACT0\"]}]",
     "hint": "JSON 数组。每项包含 name、host、port、aliases。自然语言工具会按 name/aliases 匹配；留空或说“全部”会查询所有目标。"
   },
   "default_rank_limit": {

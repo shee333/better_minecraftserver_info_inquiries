@@ -42,6 +42,7 @@ Default server status targets:
 - 轮换服: `turbo1.yunmc.vip:30175`
 - C418: `mc39.rhymc.com:24465`
 - 群组服: `mc39.rhymc.com:24463`
+- ACT/0/: `mc39.rhymc.com:24468`
 
 Configurable fields:
 
@@ -64,8 +65,8 @@ These commands are mainly for fallback and debugging. Natural-language usage is 
 - `查询home数量 <玩家名>`
 - `封禁列表`
 - `封禁状态 <玩家名>`
-- `服务器状态 [轮换服|C418|群组服]`
-- `MC状态 [轮换服|C418|群组服]`
+- `服务器状态 [轮换服|C418|群组服|ACT/0/]`
+- `MC状态 [轮换服|C418|群组服|ACT/0/]`
 
 ## LLM Tools
 
@@ -92,6 +93,7 @@ These commands are mainly for fallback and debugging. Natural-language usage is 
 - `@机器人 C418 现在在线吗？`
 - `@机器人 轮换服延迟多少？`
 - `@机器人 群组服有几个人在线？`
+- `@机器人 ACT/0/ 现在在线吗？`
 
 ## Privacy Rules
 

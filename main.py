@@ -47,14 +47,26 @@ DEFAULT_SERVER_STATUS_TARGETS = [
         "port": 24463,
         "aliases": ["群组", "群组服务器", "群组服", "全服", "velocity", "proxy"],
     },
+    {
+        "name": "ACT/0/",
+        "host": "mc39.rhymc.com",
+        "port": 24468,
+        "aliases": ["act", "ACT", "ACT/0", "act0", "ACT0"],
+    },
 ]
+
+LEGACY_DEFAULT_STATUS_ENDPOINTS = {
+    ("turbo1.yunmc.vip", 30175),
+    ("mc39.rhymc.com", 24465),
+    ("mc39.rhymc.com", 24463),
+}
 
 
 @register(
     PLUGIN_NAME,
     "shee33",
     "查询 Minecraft CMI 玩家信息、排行榜、封禁状态和服务器在线状态。",
-    "0.3.0",
+    "0.3.1",
 )
 class CMIQueryPlugin(Star):
     def __init__(self, context: Context, config: AstrBotConfig):
@@ -146,7 +158,7 @@ class CMIQueryPlugin(Star):
                         targets.append(normalized)
 
         if targets:
-            return targets
+            return self._with_default_server_updates(targets)
 
         single_target = self._normalize_server_target(
             {
@@ -156,6 +168,20 @@ class CMIQueryPlugin(Star):
             }
         )
         return [single_target] if single_target else DEFAULT_SERVER_STATUS_TARGETS
+
+    def _with_default_server_updates(
+        self, targets: list[dict[str, Any]]
+    ) -> list[dict[str, Any]]:
+        endpoints = {(target["host"], int(target["port"])) for target in targets}
+        if not LEGACY_DEFAULT_STATUS_ENDPOINTS.issubset(endpoints):
+            return targets
+        updated_targets = [*targets]
+        for default_target in DEFAULT_SERVER_STATUS_TARGETS:
+            endpoint = (default_target["host"], int(default_target["port"]))
+            if endpoint not in endpoints:
+                updated_targets.append(default_target)
+                endpoints.add(endpoint)
+        return updated_targets
 
     def _match_server_status_target(
         self, server_name: str = ""
@@ -479,10 +505,10 @@ class CMIQueryPlugin(Star):
     async def shee33_mc_server_status(
         self, event: AstrMessageEvent, server_name: str = ""
     ) -> str:
-        """查询 Minecraft Java 服务器当前在线状态，包括是否在线、延迟、版本、MOTD 和在线人数。可查询全部服务器，也可指定轮换服、C418 或群组服。
+        """查询 Minecraft Java 服务器当前在线状态，包括是否在线、延迟、版本、MOTD 和在线人数。可查询全部服务器，也可指定轮换服、C418、群组服或 ACT/0/。
 
         Args:
-            server_name(string): 服务器名称或别名，可填“轮换服”、“C418”、“群组服”；留空时查询全部服务器。
+            server_name(string): 服务器名称或别名，可填“轮换服”、“C418”、“群组服”、“ACT/0/”；留空时查询全部服务器。
         """
         await self._ack(event)
         return await self._query_server_status(event, server_name)
