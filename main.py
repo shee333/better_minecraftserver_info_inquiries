@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import re
 from pathlib import Path
 from typing import Any
 from uuid import uuid4
@@ -10,7 +11,10 @@ from astrbot.api import logger
 from astrbot.api.event import AstrMessageEvent, MessageChain, filter
 from astrbot.api.star import Context, Star, register
 from astrbot.core import AstrBotConfig
-from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
+from astrbot.core.utils.astrbot_path import (
+    get_astrbot_plugin_data_path,
+    get_astrbot_temp_path,
+)
 
 from .cmi_repository import CMIRepository
 from .formatting import (
@@ -66,13 +70,14 @@ LEGACY_DEFAULT_STATUS_ENDPOINTS = {
     PLUGIN_NAME,
     "shee33",
     "查询 Minecraft CMI 玩家信息、排行榜、封禁状态和服务器在线状态。",
-    "0.3.1",
+    "0.4.0",
 )
 class CMIQueryPlugin(Star):
     def __init__(self, context: Context, config: AstrBotConfig):
         super().__init__(context)
         self.context = context
         self.config = config
+        self._pending_delete_targets: dict[str, dict[str, Any]] = {}
 
     async def initialize(self):
         logger.info("new_plugin CMI query plugin initialized")
@@ -101,6 +106,42 @@ class CMIQueryPlugin(Star):
 
     def _max_limit(self) -> int:
         return int(self._cfg("max_rank_limit", 20) or 20)
+
+    def _server_store_path(self) -> Path:
+        return (
+            Path(get_astrbot_plugin_data_path())
+            / PLUGIN_NAME
+            / "server_status_targets.json"
+        )
+
+    def _load_server_store(self) -> dict[str, Any]:
+        path = self._server_store_path()
+        if not path.exists():
+            return {"custom_targets": [], "disabled_endpoints": []}
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError) as exc:
+            logger.warning("读取服务器状态目标存储失败，使用空存储: %s", exc)
+            return {"custom_targets": [], "disabled_endpoints": []}
+        if not isinstance(data, dict):
+            return {"custom_targets": [], "disabled_endpoints": []}
+        data.setdefault("custom_targets", [])
+        data.setdefault("disabled_endpoints", [])
+        return data
+
+    def _save_server_store(self, data: dict[str, Any]) -> None:
+        path = self._server_store_path()
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(
+            json.dumps(data, ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
+
+    def _endpoint_key(self, host: str, port: int) -> str:
+        return f"{str(host).strip().lower()}:{int(port)}"
+
+    def _target_endpoint_key(self, target: dict[str, Any]) -> str:
+        return self._endpoint_key(str(target["host"]), int(target["port"]))
 
     def _normalize_server_target(self, target: dict[str, Any]) -> dict[str, Any] | None:
         name = str(target.get("name") or "").strip()
@@ -131,6 +172,43 @@ class CMIQueryPlugin(Star):
             "aliases": [str(alias).strip() for alias in aliases if str(alias).strip()],
         }
 
+    def _apply_server_store(
+        self, targets: list[dict[str, Any]]
+    ) -> list[dict[str, Any]]:
+        store = self._load_server_store()
+        disabled = {
+            str(endpoint).strip().lower()
+            for endpoint in store.get("disabled_endpoints", [])
+            if str(endpoint).strip()
+        }
+        custom_targets = []
+        for raw_target in store.get("custom_targets", []):
+            if isinstance(raw_target, dict):
+                normalized = self._normalize_server_target(raw_target)
+                if normalized:
+                    custom_targets.append(normalized)
+        custom_targets_by_endpoint = {
+            self._target_endpoint_key(target): target for target in custom_targets
+        }
+
+        merged_targets = []
+        seen_endpoints = set()
+        for target in targets:
+            endpoint = self._target_endpoint_key(target)
+            if endpoint in disabled or endpoint in seen_endpoints:
+                continue
+            target = custom_targets_by_endpoint.pop(endpoint, target)
+            if self._target_endpoint_key(target) in disabled:
+                continue
+            merged_targets.append(target)
+            seen_endpoints.add(endpoint)
+        for endpoint, target in custom_targets_by_endpoint.items():
+            if endpoint in disabled or endpoint in seen_endpoints:
+                continue
+            merged_targets.append(target)
+            seen_endpoints.add(endpoint)
+        return merged_targets
+
     def _server_status_targets(self) -> list[dict[str, Any]]:
         raw_targets = self._cfg("server_status_servers", None)
         parsed_targets: Any = None
@@ -158,7 +236,7 @@ class CMIQueryPlugin(Star):
                         targets.append(normalized)
 
         if targets:
-            return self._with_default_server_updates(targets)
+            return self._apply_server_store(self._with_default_server_updates(targets))
 
         single_target = self._normalize_server_target(
             {
@@ -167,7 +245,10 @@ class CMIQueryPlugin(Star):
                 "port": self._cfg("server_status_port", 25565),
             }
         )
-        return [single_target] if single_target else DEFAULT_SERVER_STATUS_TARGETS
+        fallback_targets = (
+            [single_target] if single_target else DEFAULT_SERVER_STATUS_TARGETS
+        )
+        return self._apply_server_store(fallback_targets)
 
     def _with_default_server_updates(
         self, targets: list[dict[str, Any]]
@@ -197,6 +278,109 @@ class CMIQueryPlugin(Star):
             if any(name and name in query for name in lowered_names):
                 return target
         return None
+
+    def _server_target_labels(self) -> str:
+        return "、".join(target["name"] for target in self._server_status_targets())
+
+    def _parse_server_address(
+        self, host: str = "", port: int | str = 0, address: str = ""
+    ) -> tuple[str, int]:
+        raw_host = str(address or host or "").strip()
+        raw_host = re.sub(r"^minecraft://", "", raw_host, flags=re.IGNORECASE)
+        raw_host = re.sub(r"^mc://", "", raw_host, flags=re.IGNORECASE)
+        parsed_port = 0
+        try:
+            parsed_port = int(port or 0)
+        except (TypeError, ValueError):
+            parsed_port = 0
+        if raw_host.count(":") == 1:
+            host_part, port_part = raw_host.rsplit(":", 1)
+            if host_part and port_part.isdigit():
+                raw_host = host_part.strip()
+                parsed_port = int(port_part)
+        return raw_host, parsed_port
+
+    def _normalize_aliases(self, aliases: str | list[str] = "") -> list[str]:
+        if isinstance(aliases, list):
+            return [str(alias).strip() for alias in aliases if str(alias).strip()]
+        return [
+            alias.strip()
+            for alias in re.split(r"[,，、\s]+", str(aliases or ""))
+            if alias.strip()
+        ]
+
+    def _pending_delete_key(self, event: AstrMessageEvent) -> str:
+        return f"{event.get_platform_name()}:{event.get_session_id()}:{event.get_sender_id()}"
+
+    def _add_server_status_target(
+        self,
+        server_name: str,
+        host: str,
+        port: int,
+        aliases: str | list[str] = "",
+    ) -> str:
+        target = self._normalize_server_target(
+            {
+                "name": server_name,
+                "host": host,
+                "port": port,
+                "aliases": self._normalize_aliases(aliases),
+            }
+        )
+        if not target:
+            return "服务器信息格式不正确，请重新提供服务器名称、地址和端口。"
+        if not 1 <= int(target["port"]) <= 65535:
+            return "服务器端口必须在 1 到 65535 之间，请重新提供端口。"
+
+        store = self._load_server_store()
+        endpoint = self._target_endpoint_key(target)
+        custom_targets = []
+        replaced = False
+        for raw_target in store.get("custom_targets", []):
+            if not isinstance(raw_target, dict):
+                continue
+            normalized = self._normalize_server_target(raw_target)
+            if not normalized:
+                continue
+            if self._target_endpoint_key(normalized) == endpoint:
+                custom_targets.append(target)
+                replaced = True
+            else:
+                custom_targets.append(normalized)
+        if not replaced:
+            custom_targets.append(target)
+
+        disabled = [
+            str(item).strip().lower()
+            for item in store.get("disabled_endpoints", [])
+            if str(item).strip().lower() != endpoint
+        ]
+        store["custom_targets"] = custom_targets
+        store["disabled_endpoints"] = disabled
+        self._save_server_store(store)
+        action = "更新" if replaced else "添加"
+        return f"已{action}服务器 {target['name']}：{target['host']}:{target['port']}。"
+
+    def _delete_server_status_target(self, target: dict[str, Any]) -> str:
+        endpoint = self._target_endpoint_key(target)
+        store = self._load_server_store()
+        custom_targets = []
+        for raw_target in store.get("custom_targets", []):
+            if not isinstance(raw_target, dict):
+                continue
+            normalized = self._normalize_server_target(raw_target)
+            if normalized and self._target_endpoint_key(normalized) != endpoint:
+                custom_targets.append(normalized)
+        disabled = {
+            str(item).strip().lower()
+            for item in store.get("disabled_endpoints", [])
+            if str(item).strip()
+        }
+        disabled.add(endpoint)
+        store["custom_targets"] = custom_targets
+        store["disabled_endpoints"] = sorted(disabled)
+        self._save_server_store(store)
+        return f"已删除服务器 {target['name']}：{target['host']}:{target['port']}。"
 
     def _server_status_timeout(self) -> float:
         try:
@@ -504,14 +688,96 @@ class CMIQueryPlugin(Star):
     @filter.llm_tool(name="shee33_mc_server_status")
     async def shee33_mc_server_status(
         self, event: AstrMessageEvent, server_name: str = ""
-    ) -> str:
+    ) -> None:
         """查询 Minecraft Java 服务器当前在线状态，包括是否在线、延迟、版本、MOTD 和在线人数。可查询全部服务器，也可指定轮换服、C418、群组服或 ACT/0/。
 
         Args:
             server_name(string): 服务器名称或别名，可填“轮换服”、“C418”、“群组服”、“ACT/0/”；留空时查询全部服务器。
         """
         await self._ack(event)
-        return await self._query_server_status(event, server_name)
+        await self._query_server_status(event, server_name)
+        return None
+
+    @filter.llm_tool(name="shee33_mc_add_status_server")
+    async def shee33_mc_add_status_server(
+        self,
+        event: AstrMessageEvent,
+        server_name: str = "",
+        host: str = "",
+        port: int = 0,
+        address: str = "",
+        aliases: str = "",
+    ) -> str:
+        """把一个 Minecraft Java 服务器加入状态查询列表。必须提供服务器名称、地址和端口；如果用户没有提供名称、地址或端口，请不要猜测，返回缺失字段并继续追问用户。
+
+        Args:
+            server_name(string): 服务器显示名称，例如“温馨小服”。
+            host(string): 服务器域名或 IP，不包含端口也可以。
+            port(number): 服务器端口。缺少端口时必须追问用户。
+            address(string): 可选，完整地址，例如“127.0.0.1:25565”。如果 address 已包含端口，可以不填 host/port。
+            aliases(string): 可选别名，多个别名用逗号、空格或顿号分隔。
+        """
+        await self._ack(event)
+        parsed_host, parsed_port = self._parse_server_address(host, port, address)
+        missing_fields = []
+        if not str(server_name or "").strip():
+            missing_fields.append("服务器名称")
+        if not parsed_host:
+            missing_fields.append("服务器地址/IP")
+        if parsed_port <= 0:
+            missing_fields.append("端口")
+        if missing_fields:
+            return "缺少" + "、".join(missing_fields) + "，请继续向用户追问这些字段。"
+
+        return self._add_server_status_target(
+            server_name=server_name,
+            host=parsed_host,
+            port=parsed_port,
+            aliases=aliases,
+        )
+
+    @filter.llm_tool(name="shee33_mc_delete_status_server")
+    async def shee33_mc_delete_status_server(
+        self,
+        event: AstrMessageEvent,
+        server_name: str = "",
+        confirmed: bool = False,
+    ) -> str:
+        """删除一个 Minecraft 状态查询服务器。第一次调用必须 confirmed=false，只返回确认问题；用户明确确认后，第二次调用 confirmed=true 才会真正删除。
+
+        Args:
+            server_name(string): 要删除的服务器名称或别名。
+            confirmed(boolean): 用户是否已经明确二次确认删除。第一次请求删除时必须为 false；只有用户再次确认后才能为 true。
+        """
+        await self._ack(event)
+        if not str(server_name or "").strip():
+            return "缺少要删除的服务器名称，请询问用户要删除哪个服务器。"
+
+        target = self._match_server_status_target(server_name)
+        if not target:
+            return f"没有找到服务器 {server_name}。当前可删除的服务器有：{self._server_target_labels()}。"
+
+        pending_key = self._pending_delete_key(event)
+        endpoint = self._target_endpoint_key(target)
+        pending_target = self._pending_delete_targets.get(pending_key)
+        if not confirmed:
+            self._pending_delete_targets[pending_key] = target
+            return (
+                f"请向用户确认是否删除服务器 {target['name']} "
+                f"({target['host']}:{target['port']})。用户明确确认后，"
+                "再调用本工具并设置 confirmed=true。"
+            )
+
+        if not pending_target or self._target_endpoint_key(pending_target) != endpoint:
+            self._pending_delete_targets[pending_key] = target
+            return (
+                f"尚未确认删除服务器 {target['name']} "
+                f"({target['host']}:{target['port']})。请先向用户确认；"
+                "用户明确确认后，再调用本工具并设置 confirmed=true。"
+            )
+
+        self._pending_delete_targets.pop(pending_key, None)
+        return self._delete_server_status_target(target)
 
     async def terminate(self):
         logger.info("new_plugin CMI query plugin terminated")
